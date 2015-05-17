@@ -30,6 +30,11 @@ def gradient(value, low, high, low_color, high_color):
     return r, g, b, 255
 
 
+def rgba_to_rgb(rgba):
+    r, g, b, a = rgba
+    return (r, g, b)
+
+
 def draw_rivers_on_image(world, target, factor=1):
     """Draw only the rivers, it expect the background to be in place
     """
@@ -100,10 +105,28 @@ def _find_land_borders(world, factor):
 
     for y in range(world.height * factor):
         for x in range(world.width * factor):
-            if not _ocean[y][x] \
-                    and world.tiles_around_factor(factor, (x, y),
-                                                  radius=1,
-                                                  predicate=my_is_ocean):
+            if not _ocean[y][x] and world.tiles_around_factor(factor, (x, y), radius=1, predicate=my_is_ocean):
+                _borders[y][x] = True
+    return _borders
+
+
+def _find_outer_borders(world, factor, inner_borders):
+    _ocean = [[False for x in range(factor * world.width)] for y in
+              range(factor * world.height)]
+    _borders = [[False for x in range(factor * world.width)] for y in
+                range(factor * world.height)]
+    for y in range(world.height * factor):
+        for x in range(world.width * factor):
+            if world.ocean[int(y / factor)][int(x / factor)]:
+                _ocean[y][x] = True
+
+    def is_inner_border(pos):
+        x, y = pos
+        return inner_borders[y][x]
+
+    for y in range(world.height * factor):
+        for x in range(world.width * factor):
+            if _ocean[y][x] and not inner_borders[y][x] and world.tiles_around_factor(factor, (x, y), radius=1, predicate=is_inner_border):
                 _borders[y][x] = True
     return _borders
 
@@ -528,30 +551,41 @@ def draw_ancientmap(world, target, resize_factor=1,
                     sea_color=(212, 198, 169, 255), verbose=get_verbose()):
     random.seed(world.seed * 11)
 
+    draw_biome = False
+    draw_rivers = False
+    draw_mountains = True
+    draw_outer_land_border = True
+
     if verbose:
         start_time = time.time()
 
     land_color = (
         181, 166, 127, 255)  # TODO: Put this in the argument list too??
     borders = _find_land_borders(world, resize_factor)
-    mountains_mask = _find_mountains_mask(world, resize_factor)
-    boreal_forest_mask = _find_boreal_forest_mask(world, resize_factor)
-    temperate_forest_mask = _find_temperate_forest_mask(world, resize_factor)
-    warm_temperate_forest_mask = \
-        _find_warm_temperate_forest_mask(world, resize_factor)
-    tropical_dry_forest_mask = _find_tropical_dry_forest_mask(world,
-                                                              resize_factor)
-    # jungle is actually Tropical Rain Forest and Tropical Seasonal Forest
-    jungle_mask = _mask(world, world.is_jungle,
-                        resize_factor)
-    tundra_mask = _mask(world, world.is_tundra, resize_factor)
-    # savanna is actually Tropical semi-arid
-    savanna_mask = _mask(world, world.is_savanna, resize_factor)
-    cold_parklands_mask = _mask(world, world.is_cold_parklands, resize_factor)
-    steppe_mask = _mask(world, world.is_steppe, resize_factor)
-    cool_desert_mask = _mask(world, world.is_cool_desert, resize_factor)
-    chaparral_mask = _mask(world, world.is_chaparral, resize_factor)
-    hot_desert_mask = _mask(world, world.is_hot_desert, resize_factor)
+    if draw_outer_land_border:
+        outer_borders = _find_outer_borders(world, resize_factor, borders)
+        outer_borders = _find_outer_borders(world, resize_factor, outer_borders)
+
+    if draw_mountains:
+        mountains_mask = _find_mountains_mask(world, resize_factor)
+    if draw_biome:
+        boreal_forest_mask = _find_boreal_forest_mask(world, resize_factor)
+        temperate_forest_mask = _find_temperate_forest_mask(world, resize_factor)
+        warm_temperate_forest_mask = \
+            _find_warm_temperate_forest_mask(world, resize_factor)
+        tropical_dry_forest_mask = _find_tropical_dry_forest_mask(world,
+                                                                  resize_factor)
+        # jungle is actually Tropical Rain Forest and Tropical Seasonal Forest
+        jungle_mask = _mask(world, world.is_jungle,
+                            resize_factor)
+        tundra_mask = _mask(world, world.is_tundra, resize_factor)
+        # savanna is actually Tropical semi-arid
+        savanna_mask = _mask(world, world.is_savanna, resize_factor)
+        cold_parklands_mask = _mask(world, world.is_cold_parklands, resize_factor)
+        steppe_mask = _mask(world, world.is_steppe, resize_factor)
+        cool_desert_mask = _mask(world, world.is_cool_desert, resize_factor)
+        chaparral_mask = _mask(world, world.is_chaparral, resize_factor)
+        hot_desert_mask = _mask(world, world.is_hot_desert, resize_factor)
 
     def unset_mask(pos):
         x, y = pos
@@ -640,12 +674,16 @@ def draw_ancientmap(world, target, resize_factor=1,
 
     if verbose:
         start_time = time.time()
+    border_color = (0, 0, 0, 255)
+    outer_border_color = gradient(0.5, 0, 1.0, rgba_to_rgb(border_color), rgba_to_rgb(sea_color))
     for y in range(resize_factor * world.height):
         for x in range(resize_factor * world.width):
             xf = int(x / resize_factor)
             yf = int(y / resize_factor)
             if borders[y][x]:
-                target.set_pixel(x, y, (0, 0, 0, 255))
+                target.set_pixel(x, y, border_color)
+            elif draw_outer_land_border and outer_borders[y][x]:
+                target.set_pixel(x, y, outer_border_color)
             elif world.ocean[yf][xf]:
                 target.set_pixel(x, y, sea_color)
             else:
@@ -689,16 +727,14 @@ def draw_ancientmap(world, target, resize_factor=1,
         for i in range(steps):
             _antialias_step()
 
-    antialias(1)
+    from PIL import ImageFilter
+    #target.filter(ImageFilter.CONTOUR)
+    #antialias(1)
     if verbose:
         elapsed_time = time.time() - start_time
         print(
             "...drawing_functions.draw_oldmap_on_pixel: anti alias " +
             "Elapsed time " + str(elapsed_time) + " seconds.")
-
-    draw_biome = False
-    draw_rivers = False
-    draw_mountains = False
 
     # Draw glacier
     if draw_biome:
