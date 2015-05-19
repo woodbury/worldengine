@@ -548,7 +548,10 @@ def _pseudo_random_land_pos(world, i):
 
 
 def draw_ancientmap(world, target, resize_factor=1,
-                    sea_color=(212, 198, 169, 255), verbose=get_verbose()):
+                    sea_color=(212, 198, 169, 255),
+                    draw_biome = True, draw_rivers = True, draw_mountains = True,
+                    draw_outer_land_border = False,
+                    verbose=get_verbose()):
     random.seed(world.seed * 11)
 
     draw_biome = False
@@ -727,8 +730,6 @@ def draw_ancientmap(world, target, resize_factor=1,
         for i in range(steps):
             _antialias_step()
 
-    from PIL import ImageFilter
-    #target.filter(ImageFilter.CONTOUR)
     #antialias(1)
     if verbose:
         elapsed_time = time.time() - start_time
